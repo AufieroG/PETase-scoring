@@ -1,6 +1,6 @@
 import os
 import warnings
-warnings.filterwarnings('ignore') # Silenzia i warning di UMAP e Transformers
+warnings.filterwarnings('ignore') # Silence UMAP and Transformers warnings
 
 import torch
 import pandas as pd
@@ -17,11 +17,11 @@ from tqdm import tqdm
 import gc
 import sys
 
-# --- 1. CONFIGURAZIONE ---
+# --- 1. CONFIGURATION ---
 MODEL_NAME = "facebook/esm2_t33_650M_UR50D"
-DATA_PATH = "dataset_final_unique_consensus.csv" 
+DATA_PATH = "dataset.csv" 
 
-# Ottimizzazione Device per Mac Studio
+# Optimization for Mac
 if torch.backends.mps.is_available():
     DEVICE = "mps"
 elif torch.cuda.is_available():
@@ -29,25 +29,25 @@ elif torch.cuda.is_available():
 else:
     DEVICE = "cpu"
 
-print(f"--- AVVIO PIPELINE ---")
-print(f"Utilizzo device: {DEVICE}")
+print(f"--- START PIPELINE ---")
+print(f"Using device: {DEVICE}")
 
-# --- 2. CARICAMENTO DATI E TRASFORMAZIONE ---
+# --- 2. Loading data and transformation ---
 
-print("\nLettura dataset...")
+print("\nReading dataset...")
 df = pd.read_csv(DATA_PATH)
 sequences = df['Sequence'].tolist()
 
-# Usiamo DIRETTAMENTE il logaritmo calcolato in R (Base 10)
+# Using logarithm Base 10
 y = df['Consensus_Log_Activity'].values
 
-# Per i grafici/test usiamo il valore lineare calcolato in R
+# For graphs/tests we use the linear value calculated in R
 y_orig_full = df['Consensus_Linear_Activity'].values
 
 
 
-# --- 3. ESTRAZIONE EMBEDDINGS (ESM-2) ---
-print(f"Caricamento {MODEL_NAME}...")
+# --- 3. EMBEDDINGS (ESM-2) ---
+print(f"Loading {MODEL_NAME}...")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = EsmModel.from_pretrained(MODEL_NAME).to(DEVICE)
@@ -55,7 +55,7 @@ model = EsmModel.from_pretrained(MODEL_NAME).to(DEVICE)
 def get_embeddings(seq_list, batch_size=16):
     model.eval()
     all_embeddings = []
-    for i in tqdm(range(0, len(seq_list), batch_size), desc="Generazione Embeddings"):
+    for i in tqdm(range(0, len(seq_list), batch_size), desc="Generation Embeddings"):
         batch = seq_list[i : i + batch_size]
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=1024).to(DEVICE)
         with torch.no_grad():
@@ -67,7 +67,7 @@ def get_embeddings(seq_list, batch_size=16):
 
 X = get_embeddings(sequences)
 
-print("Liberazione memoria ESM-2...")
+print("Free memory ESM-2...")
 del model
 del tokenizer
 if DEVICE == "mps": 
@@ -76,22 +76,22 @@ elif DEVICE == "cuda":
     torch.cuda.empty_cache()
 gc.collect()
 
-# --- 4. CALCOLO UMAP (Sull'intero dataset) ---
-print("\nCalcolo riduzione dimensionale UMAP (spazio a 2D)...")
+# --- 4. Calculate UMAP (entire dataset) ---
+print("\nUMAP Dimensional Reduction Calculation (2D)...")
 reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
 X_umap = reducer.fit_transform(X)
 
-# --- 5. DIVISIONE 90/10 (IL TAGLIO SACRO) ---
+# --- 5. Split 90/10 ---
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.10, random_state=42
 )
-print(f"\nDataset diviso: {len(X_train)} training (90%), {len(X_test)} test (10%)")
+print(f"\nDataset split: {len(X_train)} training (90%), {len(X_test)} test (10%)")
 
 
 # =====================================================================
-# FASE 1: RICERCA IPERPARAMETRI (CV a 10-Fold sul 90%)
+# 1: HYPERPARAMETER SEARCH (10-Fold CV on 90%)
 # =====================================================================
-print("\n=== FASE 1: Ricerca Iperparametri ottimali")
+print("\n=== PHASE 1: Optimal hyperparameter search ===")
 
 def pearson_scorer(y_true, y_pred):
     if np.std(y_pred) < 1e-6 or np.std(y_true) < 1e-6:
@@ -116,7 +116,7 @@ xgb_base = xgb.XGBRegressor(
     random_state=42
 )
 
-# Usiamo 10 fold per la ricerca veloce
+# Use 10 folds for a fast search
 cv_search = KFold(n_splits=10, shuffle=True, random_state=42)
 
 random_search = RandomizedSearchCV(
@@ -137,15 +137,15 @@ best_params['tree_method'] = 'hist'
 best_params['n_jobs'] = -1
 best_params['random_state'] = 42
 
-print("\nParametri ottimali Trovati:")
+print("\nOptimal parameters found:")
 for k, v in best_params.items():
     print(f"  {k}: {v}")
 
 
 # =====================================================================
-# FASE 2: STRESS TEST DEL MODELLO (CV a 10-Fold sul 90%)
+# 2: MODEL STRESS TEST (CV 10-Fold considering 90%)
 # =====================================================================
-print(f"\n=== FASE 2: Test di Stabilità (10-Fold CV) ===")
+print(f"\n=== 2: Stability Test (10-Fold CV) ===")
 kf_10 = KFold(n_splits=10, shuffle=True, random_state=42)
 cv_r2 = []
 cv_pearson = []
@@ -158,7 +158,7 @@ for fold, (t_idx, v_idx) in enumerate(kf_10.split(X_train)):
     m.fit(xt, yt)
     p = m.predict(xv)
     
-    # Riportiamo alla scala reale per metriche oneste
+    # Convert to real scale
     yv_orig = 10 ** yv
     p_orig = 10 ** p 
     
@@ -170,23 +170,23 @@ for fold, (t_idx, v_idx) in enumerate(kf_10.split(X_train)):
     print(f"Fold {fold+1:02d}: R2 = {r2:.4f} | Pearson = {pearson_val:.4f}")
 
 print("\n----------------------------------------")
-print(" REPORT STABILITÀ (10-Fold)")
+print(" REPORT (10-Fold)")
 print("----------------------------------------")
-print(f"R2 Medio      : {np.mean(cv_r2):.4f} ± {np.std(cv_r2):.4f}")
-print(f"Pearson Medio : {np.mean(cv_pearson):.4f} ± {np.std(cv_pearson):.4f}")
+print(f"R2 mean      : {np.mean(cv_r2):.4f} ± {np.std(cv_r2):.4f}")
+print(f"Pearson mean : {np.mean(cv_pearson):.4f} ± {np.std(cv_pearson):.4f}")
 print("----------------------------------------")
 
 
 # =====================================================================
-# FASE 3: VALUTAZIONE FINALE SUL 10% (MAI VISTO)
+# 3: FINAL RATING OUT OF 10%
 # =====================================================================
-print("\n=== FASE 3: Valutazione finale sul 10% di Test ===")
+print("\n=== 3: FINAL RATING OUT OF 10% Test")
 val_model = xgb.XGBRegressor(**best_params)
 val_model.fit(X_train, y_train)
 
 preds_log = val_model.predict(X_test)
 
-# Riconversione alla scala lineare
+# Conversion to linear scale
 preds_orig = 10 ** preds_log
 y_test_orig = 10 ** y_test
 
@@ -196,7 +196,7 @@ rmse_test = np.sqrt(mean_squared_error(y_test_orig, preds_orig))
 pearson_r, _ = pearsonr(y_test_orig, preds_orig)
 
 print("\n========================================")
-print(" RISULTATI SUL SET DI TEST (10%)")
+print("TEST SET RESULTS (10%)")
 print("========================================")
 print(f"R2: {r2_test:.4f}")
 print(f"RMSE: {rmse_test:.2f}")
@@ -205,42 +205,42 @@ print("========================================")
 
 
 # =====================================================================
-# FASE 4: PLOT, ADDESTRAMENTO 100% E SALVATAGGIO
+# 4: PLOT, 100% TRAINING AND SAVE
 # =====================================================================
-print("\nGenerazione Grafici...")
+print("\nGraph Generation...")
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
 
-# Plot A: Predizione vs Realtà
+# Plot A: Prediction vs. Reality
 sns.scatterplot(x=y_test_orig, y=preds_orig, alpha=0.7, color='teal', edgecolor='w', s=80, ax=ax1)
 lims = [0, max(y_test_orig.max(), preds_orig.max())]
-ax1.plot(lims, lims, '--r', alpha=0.75, linewidth=2, label='Predizione Perfetta')
+ax1.plot(lims, lims, '--r', alpha=0.75, linewidth=2, label='Perfect Prediction')
 
 ax1.set_xscale('symlog', linthresh=10) 
 ax1.set_yscale('symlog', linthresh=10)
 ax1.set_title(f"Test Set (10%)\nPearson r: {pearson_r:.3f} | R2: {r2_test:.3f}", fontsize=14)
-ax1.set_xlabel("Attività Reale (Osservata)", fontsize=12)
-ax1.set_ylabel("Attività Predetta", fontsize=12)
+ax1.set_xlabel("Real Activity (Observed)", fontsize=12)
+ax1.set_ylabel("Predicted activity", fontsize=12)
 ax1.legend()
 ax1.grid(True, which="both", ls="--", alpha=0.3)
 
 # Plot B: UMAP
 scatter = ax2.scatter(X_umap[:, 0], X_umap[:, 1], c=y_orig_full, cmap='viridis', s=40, alpha=0.8)
-fig.colorbar(scatter, ax=ax2, label='Attività Reale (Consensus)')
-ax2.set_title("Spazio degli Embeddings (UMAP)\nFirme biochimiche delle PETasi", fontsize=14)
+fig.colorbar(scatter, ax=ax2, label='Real Activity (Consensus)')
+ax2.set_title("Embeddings Space (UMAP)\nBiochemical signatures of PETases", fontsize=14)
 ax2.set_xlabel("UMAP 1")
 ax2.set_ylabel("UMAP 2")
 
 plt.tight_layout()
-plt.savefig("pipeline_completa_finale.png", dpi=300)
-print("Plot salvato: 'pipeline_completa_finale.png'")
+plt.savefig("final_complete_pipeline.png", dpi=300)
+print("Plot saved: 'final_complete_pipeline.png'")
 
-print("\n=== FASE 4: Addestramento MODELLO DI PRODUZIONE (100%) ===")
+print("\n=== PHASE 4: Training model (100%) ===")
 final_model = xgb.XGBRegressor(**best_params)
 final_model.fit(X, y)
 
 final_model.save_model("PETase_model.json")
-print("Modello di produzione salvato: 'PETase_model.json'")
-print("\nPipeline completata con successo!")
+print("Saved model: 'PETase_model.json'")
+print("\nPipeline completed!")
 
 gc.collect()
 sys.exit(0)
