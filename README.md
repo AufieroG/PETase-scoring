@@ -26,7 +26,7 @@ This produces 'rank_PETase.csv', with the candidates ranked by predicted activit
 
 ### Retrain the model (optional)
 
-To rebuild the model from your own training data, replace `dataset.csv` — keep the filename, or edit `DATA_PATH` at the top of `PET_train.py` — then run:
+To rebuild the model from your own training data, replace 'dataset.csv' - keep the filename, or edit `DATA_PATH` at the top of `PET_train.py` — then run:
 
 ```bash
 python PET_train.py
