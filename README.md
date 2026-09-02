@@ -1,6 +1,6 @@
 # PETase-scoring
 
-A machine learning framework using ESM-2 to predict the efficacy of putative PET-degrading enzymes.
+A machine learning framework using ESM-2 to predict the efficacy of putative polyethylene terephthalate (PET) degrading enzymes.
 
 Protein sequences are embedded with ESM-2 and scored by an XGBoost regressor trained on measured PETase activity. A pre-trained model (`PETase_model.json`) is included, so you can score your own sequences without retraining.
 
