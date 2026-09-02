@@ -16,13 +16,13 @@ The scripts automatically use MPS (Apple Silicon), CUDA, or CPU, depending on wh
 
 ### Score your sequences
 
-Replace `sequences.fasta` with your own sequences in FASTA format — keep the filename, or edit `FASTA_PATH` at the top of `PET_run.py` — then run:
+Replace 'sequences.fasta' with your own sequences in FASTA format, or edit 'FASTA_PATH' at the top of 'PET_run.py' - then run:
 
 ```bash
 python PET_run.py
 ```
 
-This produces `rank_PETase.csv`, with the candidates ranked by predicted activity.
+This produces 'rank_PETase.csv', with the candidates ranked by predicted activity.
 
 ### Retrain the model (optional)
 
